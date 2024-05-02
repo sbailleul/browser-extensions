@@ -4,7 +4,6 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { StudentEvaluationPage } from "./features/evaluations/StudentEvaluation.page";
 
 
-
 const root = document.createElement("div");
 root.style.display = "none";
 root.id = "myges-content-script-root";

@@ -1,8 +1,7 @@
-import { assign, createActor, setup } from "xstate";
-import { createBrowserInspector } from "@statelyai/inspect";
+import { assign, setup } from "xstate";
 
-const { inspect } = createBrowserInspector();
 export type Subject = {
+  id: number;
   semester: number;
   name: string;
   grade: string;
@@ -13,10 +12,11 @@ export type StudentNotes = {
   firstname: string;
   lastname: string;
   continuousControls: number[];
-  exam: number;
+  exam?: number;
 };
 type Context = {
-  selectedSubject?: Subject;
+  selectedSubject?: number;
+  subjects: Subject[];
   studentNotes?: StudentNotes[];
 };
 export const studentEvaluationsMachine = setup({
@@ -24,14 +24,15 @@ export const studentEvaluationsMachine = setup({
   types: {
     context: {} as Context,
     events: {} as
-      | { type: "SELECT_SUBJECT"; subject: Subject }
+      | { type: "SET_SUBJECTS"; subjects: Subject[] }
+      | { type: "SELECT_SUBJECT"; subjectId: number }
       | { type: "SET_STUDENTS_NOTES"; studentsNotes: StudentNotes[] },
   },
   actions: {
     selectSubject: assign({
       selectedSubject: ({ event, context }) =>
         event.type === "SELECT_SUBJECT"
-          ? event.subject
+          ? event.subjectId
           : context.selectedSubject,
     }),
     setStudentsNotes: assign({
@@ -42,32 +43,40 @@ export const studentEvaluationsMachine = setup({
     }),
   },
 }).createMachine({
-  id: "StudentEvaluationnsMachine",
-  initial: "empty",
-  context: { selectedSubject: undefined },
-  states: {
-    empty: {
-      on: {
-        SELECT_SUBJECT: {
-          target: "subjectSelected",
-          actions: ["selectSubject"],
-        },
-      },
-    },
-    subjectSelected: {
-      entry: ["selectSubject"],
-      on: {
-        SET_STUDENTS_NOTES: {
-            target: 'studentsNotesRecorded',
-            actions: ['setStudentsNotes']
-        }
-      }
-    },
-    studentsNotesRecorded: {
-      entry: ["setStudentsNotes"],
-    },
-  },
-});
+  /** @xstate-layout N4IgpgJg5mDOIC5QGUAuBXCYB2qCiAbgIYA26RqAlgPbawCyRAxgBaXZgB0YAtgA6oAngGJkeACoB9ZAFUAQgCk8AYXHIA2gAYAuolB9qsSlVp6QAD0QBGG5ysAOKwBYATJoCsmlwGZ7LlwDsADQggogAtDbunN4AbN5O7rGaTvYBsU4eAL5ZIWiYOPjEZBQ0dIys7Fyw6ABGAFZgTKiwyGConNjUyHWNzW0kTaiQongAMipSsoqTWrpIIAZGJthmlgjuTgCcnC6uNlaxW0ke3iFhCOEu9ruaW3HeVu72iZr2sTl5GFi4hKTkKwYzDYHE4NQaQ1a7TBvSGAyGkE63W+hShqFGU3EMgAIngAHJqSR4gDy4jwGh0ZiWxjKa0Qm1inE2W00AW8mg5mieVnO1kCnC2T3s7kCW1iDj27hyuRAXSw8AW+R+RX+pVoQMqHCphhppgW63CASsdgCIpcsWeLi2TgCmlivMubhcAvs9hZyS813sXk+ICVhT+JUBFRBXF4Agu+h1Kzpju8JrNFr81ttFodkSenFtVi2x2eni2jg+Mv9v2KALKGtDMIhzTR2uWtP1iGuTjsd29AWObqOPNCESiAqc3lN7jHdwCiW8vtLKqDlZDVRrfRabQ6XR6tdQ8OakAbutWzYQ3nc8ZtVmu93c6W83i26atnESTiFsVTiStLhnKLLquDwKXcEVzRZc4TAQZdwgfcYyPW9nSsDtWW7MVBQdTI7EcbYENceInDfYsvgKX953VRdQSAyE11A-pwIRCAkVnesFmpGDQHWXxNHbQskOeFC+wuC9GTfBDr2uO9XR9EsfznCtSIA8jYTrKiKJoiDhno2BpKYqNGz1NjEC7Z1b3eVkLySO9gn7BBBM4YSPFdWJPwQrZpSyIA */
+  id: "StudentEvaluationsMachine",
 
-const actor = createActor(studentEvaluationsMachine, { inspect });
-actor.start();
+  context: { selectedSubject: undefined },
+
+  states: {
+    subjectSelected: {
+      entry: ["selectSubject"]
+    },
+
+    subjectsSet: {
+      states: {
+        noSubjectSelected: {
+          on: {
+            SELECT_SUBJECT: "subjectSelected"
+          }
+        },
+
+        subjectSelected: {
+          states: {
+            noStudentsSet: {
+              on: {
+                SET_STUDENTS_NOTES: "studentsSet"
+              }
+            },
+
+            studentsSet: {}
+          },
+
+          initial: "noStudentsSet"
+        }
+      },
+
+      initial: "noSubjectSelected"
+    }
+  }
+});

@@ -15,7 +15,8 @@
         "declarativeContent",
         "scripting",
         "storage",
-        "tabs"
+        "tabs",
+        "management"
      ],
      "content_scripts": [
         {
