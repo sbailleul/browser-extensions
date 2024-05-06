@@ -2,8 +2,7 @@ import { createBrowserInspector } from "@statelyai/inspect";
 import { useMachine } from "@xstate/react";
 import { useCallback, useEffect } from "react";
 import { isDefined } from "../../../common/typeGuards";
-import { StudentNotes } from "./studentNotesMachine";
-import { Subject, evaluationsMachine } from "./evaluationsMachine";
+import { StudentNotes, Subject, evaluationsMachine } from "./evaluationsMachine";
 const { inspect } = createBrowserInspector();
 
 const parseSubject = (
@@ -60,6 +59,7 @@ function parseStudent(
 }
 export function StudentEvaluationPage() {
   const [state, send] = useMachine(evaluationsMachine, { inspect });
+  console.log("coucou");
   const evalContainer = document.getElementById("studentEvalWidget");
   const mutationCallback = useCallback(() => {
     const subjectsRows = document.querySelectorAll<HTMLTableRowElement>(
@@ -90,7 +90,7 @@ export function StudentEvaluationPage() {
     );
     send({ type: "INIT_NOTES", notes });
   }, [send]);
-  useEffect(mutationCallback);
+  useEffect(mutationCallback, []);
   const studentsObserver = new MutationObserver(mutationCallback);
   if (evalContainer) {
     console.log(evalContainer);
