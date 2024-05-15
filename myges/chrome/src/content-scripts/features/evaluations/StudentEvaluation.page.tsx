@@ -1,12 +1,31 @@
+import mygesIcon from "@/assets/myges-icon.png";
+import { useClipboardListener } from "@/common/hooks/useClipboardListener";
+import { useMutationObserver } from "@/common/hooks/useMutationObserver";
+import { isDefined } from "@/common/typeGuards";
+import { HelperModal } from "@/content-scripts/features/evaluations/HelperModal";
+import {
+  compareCsv,
+  notesFormatter,
+} from "@/content-scripts/features/evaluations/csv";
+import { useMergeStudentCsvDOM } from "@/content-scripts/features/evaluations/hooks";
+import {
+  queryFirstnameSpan,
+  queryLastnameSpan,
+  queryNotesRows,
+  querySubjectsRows,
+} from "@/content-scripts/features/evaluations/queries";
 import { createBrowserInspector } from "@statelyai/inspect";
 import { useMachine } from "@xstate/react";
 import { useCallback, useEffect } from "react";
-import { isDefined } from "../../../common/typeGuards";
-import { StudentNotes, Subject, evaluationsMachine } from "./evaluationsMachine";
+import { createPortal } from "react-dom";
+import {
+  StudentNotes,
+  Subject,
+  evaluationsMachine,
+} from "@/content-scripts/features/evaluations/evaluationsMachine";
 const { inspect } = createBrowserInspector();
-
 const parseSubject = (
-  subject: HTMLTableRowElement
+  subject: HTMLTableRowElement,
 ): [string, Subject] | undefined => {
   const cells = subject.querySelectorAll("td");
   const textSemester = cells[0].textContent?.replace("Semestre", "");
@@ -31,48 +50,40 @@ const parseSubject = (
 };
 
 function parseStudent(
-  studentRow: HTMLTableRowElement
-): [string, StudentNotes] | undefined {
-  const lastname = studentRow.querySelector<HTMLSpanElement>(
-    "[id$='studentName']"
-  )?.innerText;
-  const firstname = studentRow.querySelector<HTMLSpanElement>(
-    "[id$='studentFirstname']"
-  )?.innerText;
+  studentRow: HTMLTableRowElement,
+): StudentNotes | undefined {
+  const lastname = queryLastnameSpan(studentRow)?.innerText;
+  const firstname = queryFirstnameSpan(studentRow)?.innerText;
   const continuousControls =
     studentRow.querySelectorAll<HTMLDivElement>("[id*='ccweb']");
-  const id = studentRow.getAttribute("data-ri");
-  if (!lastname || !firstname || !id) {
+  if (!lastname || !firstname) {
     return;
   }
-  return [
-    id,
-    {
-      lastname: lastname,
-      firstname: firstname,
-      continuousControls: Array.from(continuousControls).map((cc) =>
-        parseFloat(cc.innerText)
-      ),
-      exam: undefined,
-    },
-  ];
+  return {
+    lastname: lastname,
+    firstname: firstname,
+    continuousControls: Array.from(continuousControls).map((cc) =>
+      cc.innerText !== "" ? parseFloat(cc.innerText) : undefined,
+    ),
+    exam: undefined,
+  };
+}
+function NoteOverlay() {
+  return <img src={mygesIcon} />;
 }
 export function StudentEvaluationPage() {
   const [state, send] = useMachine(evaluationsMachine, { inspect });
-  console.log("coucou");
-  const evalContainer = document.getElementById("studentEvalWidget");
-  const mutationCallback = useCallback(() => {
-    const subjectsRows = document.querySelectorAll<HTMLTableRowElement>(
-      "[id='contactsForm:studentEvalWidget:matiereTable_data']>tr"
-    );
-    const studentsNotesRows = document.querySelectorAll<HTMLTableRowElement>(
-      "[id='contactsForm:studentEvalWidget:matiereEvalTable_data']>tr"
-    );
+  const { csvDomMerge, updateCsvDomMerge } = useMergeStudentCsvDOM();
+  const csv = useClipboardListener({
+    formatter: notesFormatter,
+    comparator: compareCsv,
+  });
+  const subjectsCallback = useCallback(() => {
     const subjects = Object.fromEntries(
-      Array.from(subjectsRows)
+      querySubjectsRows()
         .map((subjectRow) => {
           const subject = parseSubject(subjectRow);
-          if (!!subject) {
+          if (subject) {
             subjectRow.addEventListener("click", () => {
               send({
                 type: "SELECT_SUBJECT",
@@ -82,22 +93,51 @@ export function StudentEvaluationPage() {
           }
           return subject;
         })
-        .filter(isDefined)
+        .filter(isDefined),
     );
     send({ type: "INIT_SUBJECTS", subjects });
-    const notes = Object.fromEntries(
-      Array.from(studentsNotesRows).map(parseStudent).filter(isDefined)
-    );
-    send({ type: "INIT_NOTES", notes });
   }, [send]);
-  useEffect(mutationCallback, []);
-  const studentsObserver = new MutationObserver(mutationCallback);
-  if (evalContainer) {
-    console.log(evalContainer);
-    studentsObserver.observe(evalContainer, {
-      childList: true,
-      subtree: true,
-    });
-  }
-  return <></>;
+  useEffect(subjectsCallback, [subjectsCallback]);
+  const [observeSubjects] = useMutationObserver(
+    document.getElementById("contactsForm:studentEvalWidget:matiereTable_data"),
+    subjectsCallback,
+    { childList: true, subtree: true },
+  );
+  const studentsCallback = useCallback(
+    (mutations: MutationRecord[]) => {
+      if (
+        mutations.length === 1 &&
+        mutations[0].addedNodes.length === 1 &&
+        (mutations[0].addedNodes[0] as HTMLElement).id ===
+          "contactsForm:studentEvalWidget:matiereEvalPanel"
+      ) {
+        const studentsNotesRows = queryNotesRows();
+        const notes = studentsNotesRows.map(parseStudent).filter(isDefined);
+        send({ type: "INIT_NOTES", notes });
+      }
+    },
+    [send],
+  );
+
+  const [observeNotes] = useMutationObserver(
+    document.querySelector(".mg_content"),
+    studentsCallback,
+    { childList: true },
+  );
+  observeSubjects();
+  observeNotes();
+
+  const notesInitialized = state.matches("notesInitialized");
+  useEffect(() => {
+    updateCsvDomMerge(queryNotesRows(), csv);
+  }, [notesInitialized, csv, updateCsvDomMerge]);
+
+  return (
+    <>
+      <HelperModal />
+      {csvDomMerge.map(({ lastnameSpan }) =>
+        createPortal(<NoteOverlay />, lastnameSpan),
+      )}
+    </>
+  );
 }

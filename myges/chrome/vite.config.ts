@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
       crx({ manifest: "./src/manifest.json" }),
     ],
     build: {
-      emptyOutDir: mode == 'production',
+      emptyOutDir: mode == "production",
     },
-  }
-})
+  };
+});

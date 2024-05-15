@@ -20,6 +20,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "types": ["@types/chrome"],
+    "paths": {"@/*": ["./src/*"]}
   },
   "include": ["src"],
   "references": [{ "path": "./tsconfig.node.json" }]
